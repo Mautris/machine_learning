@@ -65,7 +65,7 @@ def ModelEva(label, y):
     TMAPE = cnt = 0
     for i in range(len(label)):
         TMAPE += abs((y[i] - label[i])/(1.5 - label[i]))
-        cnt   += 1
+        cnt   +=  1
     TMAPE = TMAPE / cnt
     score = (2 / (2 + MAE + TMAPE))**2
     print("Model Score: ", score)
@@ -110,7 +110,7 @@ def TrainFeature(t1, t2):
     # 按垂直方向（行顺序）堆叠数组构成一个新的数组
     return np.vstack([fr_cor, fbr_cor]).T
 
-#stacking就是用下一个模型去针对上一个模型预测的结果进行学习
+
 #计算数据集的平均值，25%、50%、75%分位值，作为特征之一]
 #定义函数：根据给定时间间隔和次数，叠加特征集，并增加一组特征：计算基金对相关性的平均值，25%、50%、75%分位值。
 #stack feature from t1 to t2 many times to enlarge train set
@@ -151,12 +151,11 @@ for i in range(15):
 #验证集
 xval = StackFeature(-81, -61, 20)
 yval = correlation[correlation.columns[-1]]
-#用于线下测试集，用于模型验证
 
 
 #设定:间隔每20天提取一次上述三个特征特征，即0-20，0-40……0-400天的数据，生成训练、验证、测试数据集
 #加上基金对相关性的 平均值，25%、50%、75%分位值共1004列特征
-#test set for predict 测试
+#test set for predict
 xtest = StackFeature(-20, None, 20)
 
 #定义xgboost模型
@@ -168,23 +167,23 @@ def XGB(xtrain, label, val, xtest, params):
     model = xgb.train(params, trainM, params['nrounds'])
     return model.predict(valM), model.predict(testM)
 
-#定义lgboost模型
+    #训练参数 要训练的数据 提升迭代次数
+#定义lgb模型
 def LGB(xtrain, label, val, xtest, params):
     trainM = lgb.Dataset(np.array(xtrain), label)
     model = lgb.train(params, trainM, params['nrounds'])
-    #训练参数 要训练的数据 提升迭代次数
     return model.predict(val), model.predict(xtest)
 
 #lgb
 lgb_params = {
     'application':'regression_l1',
-    'metric':'mae',
-    'seed': 0,
-    'learning_rate':0.04,
-    'max_depth':1,
-    'feature_fraction':0.7,
-    'lambda_l1':2,
-    'nrounds':900
+    'metric':'mae',#评估指标
+    'seed': 0,#随机种子
+    'learning_rate':0.04,#学习速率，设置模型稳定程度
+    'max_depth':1,#控制了树的最大深度
+    'feature_fraction':0.7,#建树特征选择比例，随机选取70%参数用于建树
+    'lambda_l1':2,#L2正则化项。默认为1.
+    'nrounds':900#最大迭代次数
 }
 lgbval, lgby = LGB(xtrain, ytrain, xval, xtest, lgb_params)
 
@@ -235,6 +234,7 @@ xgbval = np.mean(xgbval, axis=0)
 
 
 #第二层模型训练
+# 提取一定时间区间内的基金间每天的净值收益率距离值，并计算其距离值之和（融合成1列特征），经过尝试，确定提取【0-5天，0-30天，0-60天，0-90天】的净值收益率距离值之和作为特征
 xtrain2 = np.vstack([xgbval, lgbval])
 date = [5, 30, 60, 90]
 for i in tqdm(date):
@@ -255,7 +255,7 @@ lgbs_params = {
     'nrounds':1800
 }
 
-##第二层模型测试
+##第二层模型
 xtest2  = np.vstack([lgby, lgby])
 for i in tqdm(date):
     data1, data2 = TrainData(fr, -i, None)
@@ -265,6 +265,8 @@ for i in tqdm(date):
 xtest2 = xtest2.T
 
 yval2, ypredict = LGB(xtrain2, ytrain2, xtrain2, xtest2, lgbs_params)
+
+
 
 #模型评估
 ModelEva(yval/10000, yval2/10000)
